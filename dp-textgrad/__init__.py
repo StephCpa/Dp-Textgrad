@@ -37,12 +37,23 @@ from .dp_es import (
     DPEvolutionStrategy,
     DPEvolutionConfig,
     PrivacyAccountant,
+    AdvancedCompositionAccountant,
     DPScorer,
     DPScorerConfig,
     DPSelector,
     DPSelectorConfig,
     MutationEngine,
     MutationConfig,
+    CritiquePipeline,
+    FeedbackSanitiser,
+)
+from .config_dp import (
+    DPConfigBundle,
+    DP_CONFIGS,
+    get_dp_config,
+    print_config_comparison,
+    estimate_privacy_budget,
+    validate_privacy_parameters,
 )
 
 singleton_backward_engine = SingletonBackwardEngine()

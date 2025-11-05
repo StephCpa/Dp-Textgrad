@@ -202,18 +202,128 @@ pip install dp-textgrad[vllm]
 
 See [here](https://pip.pypa.io/en/stable/cli/pip_install/) for more details on various methods of pip installation.
 
-### Differential Privacy (DP-ES) Quickstart
-- **Python environment**: Python >=3.9 is required. Create an isolated environment (e.g. `python3 -m venv .venv && source .venv/bin/activate`) and install `requirements.txt`.
-- **Core dependencies**: `openai`, `httpx`, `diskcache`, and other LLM backends listed in `requirements.txt`. Tests rely on `pytest`.
-- **Data requirements**: The DP-ES utilities operate on your own task datasets; no bundled private data is included. Provide task-specific evaluation callbacks that expose only aggregate scores.
-- **Key modules**:
-  - `dp_textgrad/dp_es/feedback.py`: Sanitises textual feedback before reuse.
-  - `dp_textgrad/dp_es/critique.py`: Implements the DP critique generation/selection pipeline.
-  - `dp_textgrad/dp_es/mutation.py`: Binds critique selection into the mutation engine.
-  - `dp_textgrad/dp_es/accountant.py`: Provides both basic and advanced-composition privacy accountants.
-  - `dp_textgrad/dp_es/strategy.py`: High-level DP evolution strategy orchestrator.
-- **Running tests**: Execute `pytest` from the repository root to validate the DP-ES pipeline along with existing TextGrad tests.
-- **Reference design doc**: `DP‑TextGrad via DP‑ES.md` summarises the privacy-aware architecture, configuration tips, and research background.
+### Differential Privacy Evolution Strategy (DP-ES)
+
+TextGrad now supports **differential privacy-aware optimization** through DP-ES! Optimize text variables while providing provable privacy guarantees.
+
+#### 🚀 Quick Start with Preset Configurations
+
+```python
+import dp_textgrad as tg
+from dp_textgrad import Variable, get_dp_config, DPEvolutionStrategy
+from dp_textgrad.dp_es import DPScorer, DPSelector, MutationEngine, AdvancedCompositionAccountant
+
+# Load a preset privacy configuration
+config = tg.get_dp_config("medium_privacy")  # or "high_privacy", "low_privacy"
+
+# Define your task
+prompt = Variable("Solve this.", role_description="instruction", requires_grad=True)
+
+def evaluate(var):
+    # Your evaluation function using private data
+    return some_score
+
+# Create DP components from config
+scorer = DPScorer(config.scorer)
+selector = DPSelector(config.selector)
+mutation_engine = MutationEngine(mutation_fn=your_mutation_fn, config=config.mutation)
+accountant = AdvancedCompositionAccountant(
+    target_epsilon=config.target_epsilon,
+    target_delta=config.target_delta
+)
+
+# Run DP-ES optimization
+optimizer = DPEvolutionStrategy(
+    parameter=prompt,
+    evaluation_fn=evaluate,
+    scorer=scorer,
+    selector=selector,
+    mutation_engine=mutation_engine,
+    accountant=accountant,
+    config=config.evolution
+)
+optimizer.step()
+
+# Check privacy consumption
+print(f"Privacy used: ε={accountant.consumed_epsilon}, δ={accountant.consumed_delta}")
+```
+
+#### 📚 Tutorials & Examples
+- **Basic Tutorial**: [Tutorial-DP-Evolution-Strategy.ipynb](examples/notebooks/Tutorial-DP-Evolution-Strategy.ipynb) - Complete introduction to DP-ES
+- **Comparison**: [Tutorial-DP-ES-Comparison.ipynb](examples/notebooks/Tutorial-DP-ES-Comparison.ipynb) - DP-ES vs standard TGD
+- **Quick Start Script**: [dp_es_quickstart.py](examples/dp_es_quickstart.py) - Minimal working example
+- **Design Document**: [DP-TextGrad via DP-ES.md](DP‑TextGrad%20via%20DP‑ES.md) - Architecture and research background
+
+#### 🔧 Configuration Presets
+
+View all available privacy configurations:
+```python
+tg.print_config_comparison()
+```
+
+| Privacy Level | Target ε | Use Case | Description |
+|--------------|----------|----------|-------------|
+| `high_privacy` | ε ≤ 1.0 | Healthcare, Finance | Strong privacy for sensitive PII |
+| `medium_privacy` | 1.0 < ε ≤ 3.0 | General Business | Balanced privacy-performance |
+| `low_privacy` | 3.0 < ε ≤ 6.0 | Aggregated Data | Better performance, reasonable privacy |
+| `minimal_privacy` | ε > 6.0 | Testing, Public Data | Weak privacy, focus on performance |
+
+#### 🔑 Key Components
+- **`DPScorer`**: Evaluation with clipping and noise injection
+- **`DPSelector`**: Privacy-preserving parent selection (Noisy Top-k, Exponential Mechanism)
+- **`MutationEngine`**: Generate candidate variations with optional critique pipeline
+- **`PrivacyAccountant`** / **`AdvancedCompositionAccountant`**: Track privacy budget (ε, δ)
+- **`DPEvolutionStrategy`**: Main optimization controller
+- **`CritiquePipeline`**: DP-aware critique generation and selection
+- **`FeedbackSanitiser`**: Prevent privacy leakage in textual feedback
+
+#### ⚙️ Environment & Testing
+- **Python version**: >=3.9
+- **Core dependencies**: Listed in `requirements.txt` (openai, httpx, diskcache, etc.)
+- **Running tests**: `pytest` from repository root
+- **Data requirements**: Provide your own task evaluation functions
+
+#### 🔬 Privacy Verification
+
+Empirically verify that DP-ES provides the promised privacy guarantees:
+
+```bash
+# Quick sanity check (~30 seconds)
+python evaluation/quick_privacy_check.py
+
+# Comprehensive verification (~5-10 minutes)
+python evaluation/example_privacy_verification.py
+
+# Generate visual reports
+python evaluation/privacy_visualization.py
+```
+
+**Verification includes:**
+- ✅ Neighboring database tests (core DP property)
+- ✅ Membership inference attack resistance
+- ✅ Noise distribution validation
+- ✅ Privacy budget accuracy checks
+
+See [evaluation/README_PRIVACY_VERIFICATION.md](evaluation/README_PRIVACY_VERIFICATION.md) for details.
+
+#### 📖 Documentation & Technical Deep Dives
+
+**Getting Started:**
+- 🚀 [Quick Reference Guide](docs/QUICK_REFERENCE.md) - One-page visual summary of mutation algorithms, DP mechanisms, formulas, and best practices
+- 📘 [Basic Tutorials](examples/notebooks/) - Jupyter notebooks for hands-on learning
+- ⚡ [Quick Start Script](examples/dp_es_quickstart.py) - Minimal working example with preset configs
+
+**Advanced Topics:**
+- 🧬 [Mutation Strategies Guide](dp-textgrad/dp_es/MUTATION_STRATEGIES.md) - Complete guide to intelligent mutation algorithms (LLM-guided, adaptive, gradient-guided, crossover)
+- 🔄 [Mutation Upgrade Guide](MUTATION_UPGRADE_GUIDE.md) - How to upgrade from simple string concatenation to intelligent mutations (2-3x performance boost)
+- 🔬 [Technical Deep Dive](docs/DP_ES_TECHNICAL_EXPLANATION.md) - Comprehensive explanation of mutation algorithms and differential privacy implementation with numerical examples
+- 🎮 [Interactive Demo](examples/interactive_dp_explanation.py) - Step-by-step walkthrough of mutation evolution and DP protection
+
+**Key Concepts:**
+- **Intelligent Mutations**: Use LLMs to understand semantics and generate meaningful variations instead of simple string concatenation
+- **Adaptive Strategy**: Automatically adjusts exploration/exploitation balance during optimization (recommended for most use cases)
+- **DP Guarantees**: Score clipping → Gaussian noise injection → Privacy budget tracking with advanced composition
+- **Privacy-Performance Trade-off**: Larger ε = better performance but weaker privacy; smaller ε = stronger privacy but slower convergence
 
 ## More detailed examples
 

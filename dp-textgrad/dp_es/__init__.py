@@ -21,6 +21,14 @@ from .population import PopulationManager, Candidate
 from .strategy import DPEvolutionStrategy, DPEvolutionConfig
 from .critique import Critique, CritiqueOption, CritiquePipeline
 from .feedback import FeedbackSanitiser, FeedbackSanitiserConfig
+from .mutation_strategies import (
+    MutationMode,
+    LLMGuidedMutation,
+    GradientGuidedMutation,
+    AdaptiveMutation,
+    CrossoverMutation,
+    create_mutation_function,
+)
 
 __all__ = [
     "PrivacyAccountant",
@@ -44,4 +52,11 @@ __all__ = [
     "CritiquePipeline",
     "FeedbackSanitiser",
     "FeedbackSanitiserConfig",
+    # Advanced mutation strategies
+    "MutationMode",
+    "LLMGuidedMutation",
+    "GradientGuidedMutation",
+    "AdaptiveMutation",
+    "CrossoverMutation",
+    "create_mutation_function",
 ]
