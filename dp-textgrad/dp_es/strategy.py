@@ -32,6 +32,13 @@ class DPEvolutionConfig:
     evaluation_description: str = "dp_es_iteration"
     rng_seed: Optional[int] = None
     evaluation_takes_candidate: bool = False
+    # NEW: Early stopping parameters
+    enable_early_stopping: bool = True
+    early_stop_patience: int = 3  # Stop if no improvement for N iterations
+    early_stop_threshold: float = 0.001  # Minimum improvement threshold
+    # NEW: Elite preservation
+    enable_elitism: bool = True
+    elite_size: int = 2  # Number of top candidates to preserve
 
     def __post_init__(self):
         if self.population_size <= 0:
@@ -42,6 +49,12 @@ class DPEvolutionConfig:
             raise ValueError("parents_to_select cannot exceed population_size.")
         if self.max_iterations <= 0:
             raise ValueError("max_iterations must be positive.")
+        if self.early_stop_patience <= 0:
+            raise ValueError("early_stop_patience must be positive.")
+        if self.early_stop_threshold < 0:
+            raise ValueError("early_stop_threshold must be non-negative.")
+        if self.elite_size < 0 or self.elite_size >= self.population_size:
+            raise ValueError("elite_size must be in [0, population_size).")
 
 
 class DPEvolutionStrategy(Optimizer):
@@ -70,6 +83,10 @@ class DPEvolutionStrategy(Optimizer):
         self.population = self._bootstrap_population(parameter)
         self.best_candidate: Optional[Candidate] = None
         self._iteration = 0
+        # NEW: Early stopping tracking
+        self._best_score_history: List[float] = []
+        self._no_improvement_count: int = 0
+        self._converged: bool = False
         if hasattr(self.mutation_engine, "bind_accountant"):
             self.mutation_engine.bind_accountant(self.accountant)
 
@@ -127,6 +144,10 @@ class DPEvolutionStrategy(Optimizer):
         return selection.selected[: self.config.parents_to_select]
 
     def _build_next_population(self, parents: Iterable[Candidate]) -> None:
+        """Build next generation with optional elitism.
+
+        Optimized to preserve top performers across generations.
+        """
         parent_list = list(parents)
         offspring = self.mutation_engine.generate(
             parents=parent_list,
@@ -134,7 +155,33 @@ class DPEvolutionStrategy(Optimizer):
             rng=self.rng,
             feedback=self._last_scores,
         )
-        combined = list(parent_list) + offspring
+
+        # NEW: Elite preservation
+        elites = []
+        if self.config.enable_elitism and self.config.elite_size > 0:
+            # Preserve top candidates from current population
+            current_population = self.population.as_list()
+            sorted_by_score = sorted(
+                [c for c in current_population if c.dp_score is not None],
+                key=lambda c: c.dp_score,
+                reverse=True
+            )
+            elites = sorted_by_score[:self.config.elite_size]
+
+        # Combine: elites + parents + offspring
+        combined = elites + list(parent_list) + offspring
+
+        # Remove duplicates (by Variable content hash)
+        seen_hashes = set()
+        unique_combined = []
+        for cand in combined:
+            content_hash = hash(cand.variable.get_value())
+            if content_hash not in seen_hashes:
+                seen_hashes.add(content_hash)
+                unique_combined.append(cand)
+
+        combined = unique_combined
+
         if len(combined) < self.config.population_size:
             # Fill the rest with best remaining candidates
             remaining = [
@@ -144,10 +191,50 @@ class DPEvolutionStrategy(Optimizer):
             ]
             remaining.sort(key=lambda c: (c.dp_score is not None, c.dp_score), reverse=True)
             combined.extend(remaining[: self.config.population_size - len(combined)])
+
         self.population.update(combined[: self.config.population_size])
 
+    def _check_convergence(self) -> bool:
+        """Check if optimization has converged (early stopping).
+
+        Returns:
+            True if converged, False otherwise
+        """
+        if not self.config.enable_early_stopping:
+            return False
+
+        if len(self._best_score_history) < 2:
+            return False
+
+        # Check for improvement over recent history
+        recent_history = self._best_score_history[-self.config.early_stop_patience:]
+
+        if len(recent_history) < self.config.early_stop_patience:
+            return False
+
+        # Calculate improvement
+        max_recent = max(recent_history)
+        min_recent = min(recent_history)
+        improvement = max_recent - min_recent
+
+        # Check if improvement is below threshold
+        if improvement < self.config.early_stop_threshold:
+            self._no_improvement_count += 1
+            if self._no_improvement_count >= self.config.early_stop_patience:
+                return True
+        else:
+            self._no_improvement_count = 0
+
+        return False
+
     def step(self):
-        """Run the evolutionary loop until reaching max_iterations or budget exhaustion."""
+        """Run the evolutionary loop until reaching max_iterations, budget exhaustion, or convergence.
+
+        Optimized with:
+        - Early stopping based on convergence detection
+        - Elite preservation across generations
+        - Better tracking of optimization progress
+        """
         for self._iteration in range(1, self.config.max_iterations + 1):
             try:
                 self._evaluate_population()
@@ -156,19 +243,50 @@ class DPEvolutionStrategy(Optimizer):
                     break
                 raise
 
+            self._update_best()
+
+            # Track best score for convergence detection
+            if self.best_candidate and self.best_candidate.dp_score is not None:
+                self._best_score_history.append(self.best_candidate.dp_score)
+
+            # Check for convergence (early stopping)
+            if self._check_convergence():
+                self._converged = True
+                break
+
             parents = self._select_parents()
             if not parents:
                 break
 
             self._build_next_population(parents)
-            self._update_best()
 
+        # Final update if needed
         if self.best_candidate is None:
-            # Evaluate once to ensure best candidate exists.
             self._update_best()
 
         if self.best_candidate is not None:
             self.parameter.set_value(self.best_candidate.variable.get_value())
+
+    def get_optimization_stats(self) -> dict:
+        """Get statistics about the optimization run.
+
+        Returns:
+            Dictionary with optimization statistics
+        """
+        stats = {
+            "iterations_completed": self._iteration,
+            "converged": self._converged,
+            "best_score": self.best_candidate.dp_score if self.best_candidate else None,
+            "privacy_consumed_epsilon": self.accountant.consumed_epsilon,
+            "privacy_consumed_delta": self.accountant.consumed_delta,
+            "score_history": self._best_score_history.copy(),
+        }
+
+        # Add advanced composition stats if available
+        if hasattr(self.accountant, 'get_effective_epsilon'):
+            stats["effective_epsilon"] = self.accountant.get_effective_epsilon()
+
+        return stats
 
     def _update_best(self) -> None:
         try:

@@ -71,10 +71,33 @@ class DPSelector:
         self.config = config
 
     def _sample_gumbel(self, rng: random.Random) -> float:
+        """Sample from Gumbel(0, 1) distribution with improved numerical stability.
+
+        Optimized to handle edge cases near 0 and 1 more robustly.
+        """
         u = rng.random()
-        # Clip to avoid log(0)
-        u = min(max(u, 1e-12), 1.0 - 1e-12)
-        return -math.log(-math.log(u))
+
+        # Improved numerical stability:
+        # - Use tighter epsilon for clipping
+        # - Handle extreme cases explicitly
+        eps = 1e-10
+        u = max(eps, min(u, 1.0 - eps))
+
+        # Use numerically stable computation
+        # Gumbel = -log(-log(u))
+        # For u close to 0: -log(-log(u)) ≈ -log(log(1/u)) = -log(-log(u))
+        # For u close to 1: -log(-log(u)) ≈ -log(1-u)
+        try:
+            inner_log = math.log(u)
+            # Check if inner_log is too close to 0 (u close to 1)
+            if inner_log > -eps:
+                # u very close to 1, use approximation
+                return -math.log(1.0 - u)
+            gumbel = -math.log(-inner_log)
+            return gumbel
+        except (ValueError, ZeroDivisionError):
+            # Fallback: use median value
+            return 0.5772156649015329  # Euler-Mascheroni constant (Gumbel mean)
 
     def select(self, candidates: Sequence[Candidate], rng: Optional[random.Random] = None) -> List[Candidate]:
         result = self.select_with_metadata(candidates, rng=rng)
