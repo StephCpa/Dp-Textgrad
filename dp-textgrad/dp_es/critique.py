@@ -22,32 +22,43 @@ class Critique:
 
 @dataclass
 class CritiqueOption:
-    """Wrapper making critiques compatible with DP scoring/selection helpers."""
+    """Wrapper making critiques compatible with DP scoring/selection helpers.
+
+    IMPORTANT: Like Candidate, this class ONLY stores DP-protected scores.
+    """
 
     critique: Critique
     parent_id: Optional[str] = None
-    raw_score: Optional[float] = None
+    # raw_score: Removed to prevent privacy leakage
     dp_score: Optional[float] = None
-    noise: Optional[float] = None
+    noise_magnitude: Optional[float] = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def with_scores(
         self,
-        raw_score: float,
         dp_score: float,
-        noise: float,
+        noise_magnitude: float,
         *,
         metadata_update: Optional[dict[str, Any]] = None,
     ) -> "CritiqueOption":
+        """Update with differentially private score.
+
+        Args:
+            dp_score: The noisy (DP-protected) score
+            noise_magnitude: Absolute value of noise added
+            metadata_update: Additional metadata
+
+        Returns:
+            New CritiqueOption with updated scores
+        """
         merged_metadata = dict(self.metadata)
         if metadata_update:
             merged_metadata.update(metadata_update)
         return CritiqueOption(
             critique=self.critique,
             parent_id=self.parent_id,
-            raw_score=raw_score,
             dp_score=dp_score,
-            noise=noise,
+            noise_magnitude=noise_magnitude,
             metadata=merged_metadata,
         )
 

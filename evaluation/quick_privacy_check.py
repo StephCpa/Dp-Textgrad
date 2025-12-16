@@ -33,12 +33,11 @@ def check_noise_injection():
     print("TEST 1: NOISE INJECTION CHECK")
     print("="*70)
 
-    # Create scorer with moderate noise
     scorer = DPScorer(DPScorerConfig(
         clipping_value=1.0,
         noise_multiplier=1.0,  # Explicit noise
-        epsilon=0.5,
-        delta=1e-5
+        epsilon_per_candidate=0.5,
+        delta_per_candidate=1e-5,
     ))
 
     # Create test candidates
@@ -55,14 +54,15 @@ def check_noise_injection():
         return test_scores[idx]
 
     dp_scores = scorer.evaluate(candidates, eval_fn, rng=random.Random(42))
+    dp_values = [cand.dp_score for cand in dp_scores.updated_candidates]
 
-    # Check if noise was added (DP scores should differ from raw scores)
-    noise_detected = False
-    for i, record in enumerate(dp_scores.records):
-        noise = abs(record.dp_score - record.raw_score)
-        print(f"  Candidate {i}: raw={record.raw_score:.3f}, dp={record.dp_score:.3f}, noise={noise:.3f}")
-        if noise > 0.01:  # Significant noise
-            noise_detected = True
+    # Because raw scores are all 0.5, any noticeable variance implies noise was added.
+    noise_std = float(np.std(dp_values))
+    for i, dp_value in enumerate(dp_values):
+        print(f"  Candidate {i}: dp_score={dp_value:.3f}")
+
+    noise_detected = noise_std > 0.01
+    print(f"\n  Observed std of DP scores: {noise_std:.3f}")
 
     if noise_detected:
         print("\n✓ PASS: Noise injection is working")
@@ -82,8 +82,8 @@ def check_score_clipping():
     scorer = DPScorer(DPScorerConfig(
         clipping_value=1.0,
         noise_multiplier=0.0,  # No noise for clearer test
-        epsilon=0.5,
-        delta=1e-5
+        epsilon_per_candidate=0.5,
+        delta_per_candidate=1e-5,
     ))
 
     # Test with scores outside clipping bounds
@@ -99,13 +99,15 @@ def check_score_clipping():
         return test_scores[idx]
 
     dp_scores = scorer.evaluate(candidates, eval_fn, rng=random.Random(42))
+    dp_values = [cand.dp_score for cand in dp_scores.updated_candidates]
 
-    # Check clipping
+    clip_value = scorer.config.clipping_value
     all_clipped = True
-    for i, record in enumerate(dp_scores.records):
-        clipped_correctly = -1.0 <= record.clipped_score <= 1.0
-        print(f"  Score {i}: raw={record.raw_score:.2f} → clipped={record.clipped_score:.2f} "
-              f"{'✓' if clipped_correctly else '✗'}")
+    for idx, (raw_score, dp_value) in enumerate(zip(test_scores, dp_values)):
+        expected = max(-clip_value, min(clip_value, raw_score))
+        clipped_correctly = abs(dp_value - expected) < 1e-6
+        print(f"  Score {idx}: raw={raw_score:.2f} → clipped={dp_value:.2f} "
+              f"(expected {expected:.2f}) {'✓' if clipped_correctly else '✗'}")
         if not clipped_correctly:
             all_clipped = False
 
@@ -201,7 +203,7 @@ def check_dp_selection():
     for i, score in enumerate(scores):
         var = Variable(f"cand_{i}", role_description="test", requires_grad=False)
         cand = Candidate(var, {"id": i})
-        cand = cand.with_scores(raw_score=score, dp_score=score, noise=0.0)
+        cand = cand.with_scores(dp_score=score, noise_magnitude=0.0)
         candidates.append(cand)
 
     # Run selection multiple times

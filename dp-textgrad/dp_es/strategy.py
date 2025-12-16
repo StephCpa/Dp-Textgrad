@@ -296,7 +296,7 @@ class DPEvolutionStrategy(Optimizer):
         if self.best_candidate is None:
             self.best_candidate = current_best
         else:
-            # Compare dp_score first, fallback to raw_score if necessary.
+            # Compare dp_score (only DP-protected scores are stored)
             best_score = self.best_candidate.dp_score if self.best_candidate.dp_score is not None else float("-inf")
             current_score = current_best.dp_score if current_best.dp_score is not None else float("-inf")
             if current_score >= best_score:

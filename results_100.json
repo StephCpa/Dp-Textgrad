@@ -1,0 +1,39 @@
+{
+  "config": {
+    "samples": 100,
+    "epsilon": 10.0,
+    "delta": 0.0001,
+    "composition": "advanced",
+    "iterations": 10,
+    "population": 4,
+    "seed": 42
+  },
+  "privacy": {
+    "epsilon_consumed": 8.548694067948682,
+    "delta_consumed": 5e-05,
+    "epsilon_remaining": 1.4513059320513175
+  },
+  "performance": {
+    "initial_score": 0.5278853596915767,
+    "final_score": 0.5178531367751817,
+    "improvement": -0.01003222291639494,
+    "improvement_percent": -1.9004548491847522,
+    "iteration_scores": [
+      0.5278853596915767,
+      0.4843843639370541,
+      0.40595944388761407,
+      0.4437275949607207,
+      0.5010710576206725,
+      0.4053071939367727,
+      0.4397675301373297,
+      0.5299768875559047,
+      0.5089882961206433,
+      0.44408812440813933,
+      0.5178531367751817
+    ]
+  },
+  "runtime": {
+    "total_seconds": 0.049712181091308594,
+    "seconds_per_iteration": 0.004971218109130859
+  }
+}

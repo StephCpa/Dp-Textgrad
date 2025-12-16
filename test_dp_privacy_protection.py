@@ -19,7 +19,7 @@ import random
 import re
 from typing import List, Dict, Set
 
-os.environ["OPENAI_API_KEY"] = "sk-Lyld88sT_oGZgcE9HyKoLg"
+os.environ["OPENAI_API_KEY"] = "sk-ccai3pDr1nrkZOs_CJUs4w"
 os.environ["OPENAI_API_BASE"] = "https://llmapi.paratera.com"
 
 import dp_textgrad as tg
@@ -175,9 +175,10 @@ def run_dp_optimization():
     scorer_config = DPScorerConfig(
         clipping_value=10.0,
         noise_multiplier=None,
-        epsilon=1.5,  # 适中的隐私保护
-        delta=1e-5,
-        enable_score_cache=False  # 禁用缓存以真实测试
+        epsilon_per_candidate=1.5,  # 适中的隐私保护
+        delta_per_candidate=1e-5,
+        enable_score_cache=False,  # 禁用缓存以真实测试
+        composition="advanced"  # 使用高级组合节省预算
     )
     scorer = DPScorer(scorer_config)
 

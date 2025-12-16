@@ -8,27 +8,40 @@ from dp_textgrad.variable import Variable
 
 @dataclass
 class Candidate:
-    """Container tracking a candidate Variable through the DP-ES pipeline."""
+    """Container tracking a candidate Variable through the DP-ES pipeline.
+
+    IMPORTANT: This class ONLY stores differentially private (noisy) scores.
+    Raw scores are never stored to prevent privacy leakage.
+    """
 
     variable: Variable
     parent_id: Optional[str] = None
-    raw_score: Optional[float] = None
+    # raw_score: Removed to prevent privacy leakage - only DP scores allowed
     dp_score: Optional[float] = None
-    noise: Optional[float] = None
+    noise_magnitude: Optional[float] = None  # Only store noise magnitude for debugging
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def with_scores(
         self,
-        raw_score: float,
         dp_score: float,
-        noise: float,
+        noise_magnitude: float,
         *,
         metadata_update: Optional[dict[str, Any]] = None,
     ) -> "Candidate":
+        """Update candidate with differentially private score.
+
+        Args:
+            dp_score: The noisy (DP-protected) score
+            noise_magnitude: Absolute value of noise added (for debugging only)
+            metadata_update: Additional metadata to store
+
+        Returns:
+            New Candidate instance with updated scores
+        """
         new_metadata = dict(self.metadata)
         if metadata_update:
             new_metadata.update(metadata_update)
-        return replace(self, raw_score=raw_score, dp_score=dp_score, noise=noise, metadata=new_metadata)
+        return replace(self, dp_score=dp_score, noise_magnitude=noise_magnitude, metadata=new_metadata)
 
     def new_generation(self, variable: Variable, *, metadata: Optional[dict[str, Any]] = None) -> "Candidate":
         """Return a child candidate carrying parent metadata forward."""

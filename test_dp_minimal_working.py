@@ -8,7 +8,7 @@
 import os
 import random
 
-os.environ["OPENAI_API_KEY"] = "sk-Lyld88sT_oGZgcE9HyKoLg"
+os.environ["OPENAI_API_KEY"] = "sk-ccai3pDr1nrkZOs_CJUs4w"
 os.environ["OPENAI_API_BASE"] = "https://llmapi.paratera.com"
 
 import dp_textgrad as tg
@@ -58,13 +58,14 @@ print("=" * 80)
 scorer_config = DPScorerConfig(
     clipping_value=10.0,        # 裁剪值
     noise_multiplier=None,       # 自动校准噪声
-    epsilon=0.5,                 # 每次评分消耗 ε=0.5
-    delta=1e-5                   # δ 参数
+    epsilon_per_candidate=0.5,   # 每次评分消耗 ε=0.5
+    delta_per_candidate=1e-5,    # δ 参数
+    composition="basic"          # 使用基础组合以便预测
 )
 scorer = DPScorer(scorer_config)
 
 print(f"✓ DPScorer")
-print(f"  - 每次评分消耗: ε={scorer_config.epsilon}")
+print(f"  - 每次评分消耗: ε={scorer_config.epsilon_per_candidate}")
 print(f"  - 裁剪值: {scorer_config.clipping_value}")
 print(f"  - 自动噪声校准: {scorer_config.noise_multiplier is None}")
 
@@ -220,10 +221,15 @@ if success:
 
     # 预期消耗计算
     iterations_run = min(evolution_config.max_iterations, 3)  # 实际运行的迭代数
-    expected_eps = iterations_run * (scorer_config.epsilon + selector_config.epsilon)
+    # Note: With basic composition, each iteration scores population_size candidates
+    # So: population_size × epsilon_per_candidate per iteration
+    expected_eps_per_iter = evolution_config.population_size * scorer_config.epsilon_per_candidate + selector_config.epsilon
+    expected_eps = iterations_run * expected_eps_per_iter
 
     print(f"\n💡 预期消耗:")
-    print(f"  每轮消耗: ε={scorer_config.epsilon}(评分) + ε={selector_config.epsilon}(选择) = {scorer_config.epsilon + selector_config.epsilon}")
+    print(f"  每轮评分: {evolution_config.population_size} candidates × ε={scorer_config.epsilon_per_candidate} = {evolution_config.population_size * scorer_config.epsilon_per_candidate}")
+    print(f"  每轮选择: ε={selector_config.epsilon}")
+    print(f"  每轮总计: ε={expected_eps_per_iter}")
     print(f"  {iterations_run} 轮预期: ε={expected_eps:.2f}")
 
     if accountant.consumed_epsilon > 0:

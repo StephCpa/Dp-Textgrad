@@ -139,12 +139,16 @@ class LLMGuidedMutation:
         feedback_text = ""
         if feedback is not None:
             if isinstance(feedback, DPScores):
-                # Use DP scores to guide mutation
-                avg_score = sum(r.dp_score for r in feedback.records) / len(feedback.records)
-                feedback_text = (
-                    f"Previous evaluation score: {avg_score:.3f}/1.0\n"
-                    f"Iteration: {iteration}\n"
-                )
+                # Use DP-protected scores to guide mutation (NOT raw scores!)
+                # Access via updated_candidates which contains only DP-protected data
+                if feedback.updated_candidates:
+                    dp_scores = [c.dp_score for c in feedback.updated_candidates if c.dp_score is not None]
+                    if dp_scores:
+                        avg_score = sum(dp_scores) / len(dp_scores)
+                        feedback_text = (
+                            f"Previous evaluation score: {avg_score:.3f}/1.0\n"
+                            f"Iteration: {iteration}\n"
+                        )
             elif isinstance(feedback, str):
                 feedback_text = f"Feedback: {feedback}\n"
 
@@ -427,12 +431,14 @@ class AdaptiveMutation:
     def _update_mode(self, iteration: int, feedback: Optional[Any]):
         """Adapt mutation mode based on progress."""
 
-        # Extract score if available
+        # Extract score if available (use DP-protected scores, NOT raw!)
         current_score = None
         if feedback is not None and isinstance(feedback, DPScores):
-            if feedback.records:
-                current_score = max(r.dp_score for r in feedback.records)
-                self.iteration_scores.append(current_score)
+            if feedback.updated_candidates:
+                dp_scores = [c.dp_score for c in feedback.updated_candidates if c.dp_score is not None]
+                if dp_scores:
+                    current_score = max(dp_scores)
+                    self.iteration_scores.append(current_score)
 
         # Simple adaptive strategy:
         # - Early iterations (< 30%): Explore
